@@ -4,30 +4,17 @@ import VisualEditsMessenger from "../visual-edits/VisualEditsMessenger";
 import ErrorReporter from "@/components/ErrorReporter";
 import Script from "next/script";
 
-export const metadata = {
-  title: 'Campus Notes',
-  description: 'Campus Notes landing page',
+export const metadata: Metadata = {
+  title: "Campus Notes",
+  description: "Campus Notes landing page",
   icons: {
-    icon: '/favicon.ico',
-    shortcut: '/favicon.ico',
-    // you can add apple touch icons or other sizes here as needed:
-    // apple: '/apple-touch-icon.png'
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    // apple: "/apple-touch-icon.png",
   },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en">
-      <body>{children}</body>
-    </html>
-  );
-}
-
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
   return (
     <html lang="en">
       <body className="antialiased">
