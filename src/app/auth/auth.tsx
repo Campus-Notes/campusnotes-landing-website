@@ -2,13 +2,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { auth } from '../../../firebase/clientApp';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function SignInScreen() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [firebaseConfigured, setFirebaseConfigured] = useState(!!auth);
   const [email, setEmail] = useState('');
@@ -93,7 +93,7 @@ export default function SignInScreen() {
     );
   }
 
-  const handleEmailPasswordLogin = async (e: React.FormEvent) => {
+  const handleEmailPasswordLogin = async (e) => {
     e.preventDefault();
     setError('');
     setIsLoggingIn(true);
@@ -101,7 +101,7 @@ export default function SignInScreen() {
     try {
       const { signInWithEmailAndPassword } = await import('firebase/auth');
       await signInWithEmailAndPassword(auth, email, password);
-    } catch (err: any) {
+    } catch (err) {
       setError(err.message || 'Login failed. Please try again.');
       setIsLoggingIn(false);
     }

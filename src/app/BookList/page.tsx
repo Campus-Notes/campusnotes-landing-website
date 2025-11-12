@@ -2,29 +2,46 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { auth, firestore } from '../../../firebase/clientApp';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { collection, getDocs, updateDoc, doc, DocumentData } from 'firebase/firestore';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import Link from 'next/link';
 
+// Define proper Note interface
+interface Note {
+  id: string;
+  title?: string;
+  fileName?: string;
+  fileContent?: string;
+  fileEncodedData?: string;
+  author?: string;
+  subject?: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+  verified?: boolean;
+  verifiedAt?: string;
+  verifiedBy?: string;
+}
+
 export default function BookListPage() {
-  const [user, setUser] = useState(null);
-  const [notes, setNotes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedNote, setSelectedNote] = useState(null);
-  const [verifying, setVerifying] = useState(false);
-  const [pdfUrl, setPdfUrl] = useState(null);
-  const [viewingPdf, setViewingPdf] = useState(false);
-  const [currentPdfNote, setCurrentPdfNote] = useState(null);
-  const activeObjectUrl = useRef(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [selectedNote, setSelectedNote] = useState<Note | null>(null);
+  const [verifying, setVerifying] = useState<boolean>(false);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [viewingPdf, setViewingPdf] = useState<boolean>(false);
+  const [currentPdfNote, setCurrentPdfNote] = useState<Note | null>(null);
+  const activeObjectUrl = useRef<string | null>(null);
 
   // Utility: sanitize base64 string (remove whitespace/newlines)
-  const sanitizeBase64 = (s) => (typeof s === 'string' ? s.replace(/\s+/g, '') : s);
+  const sanitizeBase64 = (s: string): string => (typeof s === 'string' ? s.replace(/\s+/g, '') : s);
 
   // convert base64 string -> Blob
-  const base64ToBlob = (base64, mime = 'application/pdf') => {
+  const base64ToBlob = (base64: string, mime = 'application/pdf'): Blob => {
     const cleaned = sanitizeBase64(base64);
     const byteChars = atob(cleaned);
     const byteNumbers = new Array(byteChars.length);
@@ -36,7 +53,7 @@ export default function BookListPage() {
   };
 
   // create an object URL for the PDF (and revoke previous if exists)
-  const createPdfUrl = (base64) => {
+  const createPdfUrl = (base64: string): string | null => {
     try {
       if (!base64) return null;
       if (activeObjectUrl.current) {
@@ -54,7 +71,7 @@ export default function BookListPage() {
   };
 
   // handle viewing pdf
-  const handleViewPdf = (note) => {
+  const handleViewPdf = (note: Note): void => {
     const base64 = note.fileContent || note.fileEncodedData;
     if (base64) {
       const url = createPdfUrl(base64);
@@ -71,7 +88,7 @@ export default function BookListPage() {
   };
 
   // handle download (use Blob + object URL for reliable download)
-  const handleDownloadPdf = (note) => {
+  const handleDownloadPdf = (note: Note): void => {
     const base64 = note.fileContent || note.fileEncodedData;
     if (!base64) {
       alert('No PDF file attached to this note.');
@@ -96,7 +113,7 @@ export default function BookListPage() {
   };
 
   // decode text-like base64 fields (title/description etc.)
-  const decodeBase64 = (str) => {
+  const decodeBase64 = (str: string): string => {
     try {
       // some text fields might be base64 encoded; attempt a decode, else return original
       const cleaned = sanitizeBase64(str);
@@ -109,15 +126,15 @@ export default function BookListPage() {
   };
 
   // check if a string looks like base64 (simple heuristic)
-  const isBase64 = (str) => {
+  const isBase64 = (str: string): boolean => {
     if (typeof str !== 'string') return false;
     // basic regex check (allows padding), avoid throwing on invalid input
     return /^[A-Za-z0-9+/=\s]+$/.test(str) && str.length % 4 === 0;
   };
 
   // Normalize the raw note: map backend names to what the UI expects, decode text fields if base64
-  const getDecodedContent = (note) => {
-    const decodedNote = { ...note };
+  const getDecodedContent = (note: DocumentData & { id: string }): Note => {
+    const decodedNote: Note = { ...note, id: note.id };
 
     // map backend binary/text fields to UI-friendly keys
     if (!decodedNote.fileContent && decodedNote.fileEncodedData) {
@@ -133,14 +150,17 @@ export default function BookListPage() {
     }
 
     // decode textual fields if they appear to be base64
-    ['title', 'author', 'subject', 'description', 'category'].forEach((k) => {
-      if (decodedNote[k] && isBase64(decodedNote[k])) {
-        decodedNote[k] = decodeBase64(decodedNote[k]);
+    (['title', 'author', 'subject', 'description', 'category'] as const).forEach((k) => {
+      const value = decodedNote[k];
+      if (value && typeof value === 'string' && isBase64(value)) {
+        decodedNote[k] = decodeBase64(value);
       }
     });
 
     if (decodedNote.tags && Array.isArray(decodedNote.tags)) {
-      decodedNote.tags = decodedNote.tags.map(tag => (isBase64(tag) ? decodeBase64(tag) : tag));
+      decodedNote.tags = decodedNote.tags.map(tag => 
+        (typeof tag === 'string' && isBase64(tag) ? decodeBase64(tag) : tag)
+      );
     }
 
     return decodedNote;
@@ -172,7 +192,7 @@ export default function BookListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchNotes = async () => {
+  const fetchNotes = async (): Promise<void> => {
     try {
       if (!firestore) {
         console.error('Firestore not initialized');
@@ -182,8 +202,8 @@ export default function BookListPage() {
 
       const notesCollection = collection(firestore, 'notes');
       const querySnapshot = await getDocs(notesCollection);
-      const notesList = querySnapshot.docs.map((docSnap) => {
-        const rawNote = { id: docSnap.id, ...docSnap.data() };
+      const notesList: Note[] = querySnapshot.docs.map((docSnap) => {
+        const rawNote: DocumentData & { id: string } = { id: docSnap.id, ...docSnap.data() };
 
         // Map backend keys to front-end friendly ones before decoding:
         // if backend uses `fileEncodedData` and `fileName`, keep both but also provide UI-friendly aliases
@@ -204,7 +224,9 @@ export default function BookListPage() {
     }
   };
 
-  const handleVerifyNote = async (noteId) => {
+  const handleVerifyNote = async (noteId: string): Promise<void> => {
+    if (!user) return;
+    
     setVerifying(true);
     try {
       const noteRef = doc(firestore, 'notes', noteId);
@@ -219,7 +241,7 @@ export default function BookListPage() {
               ...note,
               verified: true,
               verifiedAt: new Date().toISOString(),
-              verifiedBy: user.email,
+              verifiedBy: user.email || undefined,
             }
           : note
       ));
@@ -232,7 +254,7 @@ export default function BookListPage() {
     }
   };
 
-  const handleSignOut = async () => {
+  const handleSignOut = async (): Promise<void> => {
     try {
       await signOut(auth);
       window.location.href = '/auth';
@@ -413,7 +435,7 @@ export default function BookListPage() {
                   </div>
                 </div>
               )}
-              {selectedNote.verified && (
+              {selectedNote.verified && selectedNote.verifiedAt && selectedNote.verifiedBy && (
                 <div className="bg-green-500/10 border border-green-500/30 rounded p-3">
                   <p className="text-xs text-green-700 dark:text-green-400">
                     ✓ Verified by {selectedNote.verifiedBy} on{' '}
@@ -508,7 +530,7 @@ export default function BookListPage() {
             <div className="border-t p-4 flex gap-2 justify-end">
               <Button
                 variant="outline"
-                onClick={() => handleDownloadPdf(currentPdfNote)}
+                onClick={() => currentPdfNote && handleDownloadPdf(currentPdfNote)}
               >
                 Download PDF
               </Button>
