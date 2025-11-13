@@ -16,7 +16,7 @@ interface Note {
   fileName?: string;
   fileContent?: string;
   fileEncodedData?: string;
-  author?: string;
+  author?: string; // will store resolved owner firstname when available
   subject?: string;
   description?: string;
   category?: string;
@@ -36,6 +36,9 @@ export default function BookListPage() {
   const [viewingPdf, setViewingPdf] = useState<boolean>(false);
   const [currentPdfNote, setCurrentPdfNote] = useState<Note | null>(null);
   const activeObjectUrl = useRef<string | null>(null);
+
+  // map of uid -> firstname
+  const [usersMap, setUsersMap] = useState<Record<string, string>>({});
 
   // Utility: sanitize base64 string (remove whitespace/newlines)
   const sanitizeBase64 = (s: string): string => (typeof s === 'string' ? s.replace(/\s+/g, '') : s);
@@ -140,16 +143,16 @@ export default function BookListPage() {
     if (!decodedNote.fileContent && decodedNote.fileEncodedData) {
       decodedNote.fileContent = sanitizeBase64(decodedNote.fileEncodedData);
     }
-    
+
     // Map ownerUid to author for display (note: lowercase 'd')
-    if (!decodedNote.author && decodedNote.ownerUid) {
-      decodedNote.author = decodedNote.ownerUid;
+    if (!decodedNote.author && (decodedNote.ownerUid || (note as any).ownerUId)) {
+      decodedNote.author = (note as any).ownerUid || (note as any).ownerUId;
     }
-    
+
     if (!decodedNote.fileName && decodedNote.fileName === undefined && decodedNote.fileName !== null) {
       // no-op but keeps parity
     }
-    
+
     if ((!decodedNote.title || decodedNote.title === '') && decodedNote.fileName) {
       decodedNote.title = decodedNote.fileName;
     }
@@ -205,26 +208,49 @@ export default function BookListPage() {
         return;
       }
 
+      // Fetch notes
       const notesCollection = collection(firestore, 'notes');
-      const querySnapshot = await getDocs(notesCollection);
-      const notesList: Note[] = querySnapshot.docs.map((docSnap) => {
-        const rawNote: DocumentData & { id: string } = { id: docSnap.id, ...docSnap.data() };
+      const notesSnapshot = await getDocs(notesCollection);
+      const rawNotes = notesSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
 
+      // Fetch users collection (to resolve ownerUid -> firstname)
+      const usersCollection = collection(firestore, 'users');
+      const usersSnapshot = await getDocs(usersCollection);
+      const usersMapTemp: Record<string, string> = {};
+      usersSnapshot.docs.forEach(u => {
+        const data = u.data() as DocumentData;
+        // field name might be 'firstname' (per your note). try multiple fallbacks
+        const name = data.firstname || data.firstName || data.first_name || data.name || 'Unknown';
+        usersMapTemp[u.id] = name;
+      });
+      setUsersMap(usersMapTemp);
+
+      // Process and decode notes
+      const notesList: Note[] = rawNotes.map((rawNote) => {
         // Map backend keys to front-end friendly ones before decoding:
-        if (rawNote.fileEncodedData && !rawNote.fileContent) {
-          rawNote.fileContent = sanitizeBase64(rawNote.fileEncodedData);
+        if ((rawNote as any).fileEncodedData && !rawNote.fileContent) {
+          rawNote.fileContent = sanitizeBase64((rawNote as any).fileEncodedData);
         }
         if (rawNote.fileName && (!rawNote.title || rawNote.title === '')) {
           rawNote.title = rawNote.fileName;
         }
-        
-        // FIX: Map ownerUId to author if author doesn't exist
-        if (!rawNote.author && rawNote.ownerUId) {
-          rawNote.author = rawNote.ownerUId;
+
+        // keep previous ownerUid -> author mapping
+        if (!rawNote.author && (rawNote as any).ownerUId) {
+          rawNote.author = (rawNote as any).ownerUId;
         }
 
-        return getDecodedContent(rawNote);
+        const decoded = getDecodedContent(rawNote as DocumentData & { id: string });
+
+        // Resolve owner UID to firstname from usersMapTemp
+        const ownerUid = (rawNote as any).ownerUid || (rawNote as any).ownerUId;
+        if (ownerUid && usersMapTemp[ownerUid]) {
+          decoded.author = usersMapTemp[ownerUid];
+        }
+
+        return decoded;
       });
+
       setNotes(notesList);
       setLoading(false);
     } catch (error) {
@@ -235,7 +261,7 @@ export default function BookListPage() {
 
   const handleVerifyNote = async (noteId: string): Promise<void> => {
     if (!user) return;
-    
+
     setVerifying(true);
     try {
       const noteRef = doc(firestore, 'notes', noteId);
