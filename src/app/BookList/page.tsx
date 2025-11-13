@@ -265,21 +265,32 @@ export default function BookListPage() {
     setVerifying(true);
     try {
       const noteRef = doc(firestore, 'notes', noteId);
+
+      const verifiedAt = new Date().toISOString();
+      const verifiedBy = user.email || user.uid || 'admin';
+
+      // Update both field names in Firestore to be safe
       await updateDoc(noteRef, {
-        verified: true,
-        verifiedAt: new Date().toISOString(),
-        verifiedBy: user.email,
+        isVerified: true,
+        verified: true,            // keep legacy field in sync
+        verifiedAt,
+        verifiedBy,
       });
+
+      // Update local state: set both flags so UI and details modal reflect change immediately
       setNotes(notes.map((note) =>
         note.id === noteId
           ? {
               ...note,
+              isVerified: true,
               verified: true,
-              verifiedAt: new Date().toISOString(),
-              verifiedBy: user.email || undefined,
+              verifiedAt,
+              verifiedBy,
             }
           : note
       ));
+
+      // if a note is open in detail modal, close it (your existing behavior)
       setSelectedNote(null);
     } catch (error) {
       console.error('Error verifying note:', error);
@@ -288,6 +299,7 @@ export default function BookListPage() {
       setVerifying(false);
     }
   };
+
 
   const handleSignOut = async (): Promise<void> => {
     try {
