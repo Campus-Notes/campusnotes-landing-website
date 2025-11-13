@@ -138,13 +138,18 @@ export default function BookListPage() {
 
     // map backend binary/text fields to UI-friendly keys
     if (!decodedNote.fileContent && decodedNote.fileEncodedData) {
-      // fileEncodedData is the backend name in your schema
       decodedNote.fileContent = sanitizeBase64(decodedNote.fileEncodedData);
     }
-    if (!decodedNote.fileName && decodedNote.fileName === undefined && decodedNote.fileName !== null) {
-      // no-op but keeps parity; actual mapping below handles fileName->title
+    
+    // Map ownerUid to author for display (note: lowercase 'd')
+    if (!decodedNote.author && decodedNote.ownerUid) {
+      decodedNote.author = decodedNote.ownerUid;
     }
-    // prefer title; if missing but fileName present, use fileName as title
+    
+    if (!decodedNote.fileName && decodedNote.fileName === undefined && decodedNote.fileName !== null) {
+      // no-op but keeps parity
+    }
+    
     if ((!decodedNote.title || decodedNote.title === '') && decodedNote.fileName) {
       decodedNote.title = decodedNote.fileName;
     }
@@ -206,12 +211,16 @@ export default function BookListPage() {
         const rawNote: DocumentData & { id: string } = { id: docSnap.id, ...docSnap.data() };
 
         // Map backend keys to front-end friendly ones before decoding:
-        // if backend uses `fileEncodedData` and `fileName`, keep both but also provide UI-friendly aliases
         if (rawNote.fileEncodedData && !rawNote.fileContent) {
           rawNote.fileContent = sanitizeBase64(rawNote.fileEncodedData);
         }
         if (rawNote.fileName && (!rawNote.title || rawNote.title === '')) {
           rawNote.title = rawNote.fileName;
+        }
+        
+        // FIX: Map ownerUId to author if author doesn't exist
+        if (!rawNote.author && rawNote.ownerUId) {
+          rawNote.author = rawNote.ownerUId;
         }
 
         return getDecodedContent(rawNote);
@@ -314,7 +323,7 @@ export default function BookListPage() {
               <Card
                 key={note.id}
                 className={`cursor-pointer transition-all hover:shadow-lg ${
-                  note.verified ? 'border-green-500/50' : 'border-yellow-500/50'
+                  note.verified ? 'border-blue-500/50' : 'border-yellow-500/50'
                 }`}
               >
                 <CardHeader>
@@ -327,11 +336,11 @@ export default function BookListPage() {
                     </div>
                     <div className="text-xs font-semibold px-2 py-1 rounded">
                       {note.verified ? (
-                        <span className="bg-green-500/20 text-green-700 dark:text-green-400">
+                        <span className=" text-green-700 dark:text-green-400">
                           ✓ Verified
                         </span>
                       ) : (
-                        <span className="bg-yellow-500/20 text-yellow-700 dark:text-yellow-400">
+                        <span className=" text-red-500 dark:text-yellow-400">
                           Pending
                         </span>
                       )}
@@ -371,7 +380,7 @@ export default function BookListPage() {
                     {!note.verified && (
                       <Button
                         size="sm"
-                        className="flex-1 bg-green-600 hover:bg-green-700"
+                        className="flex-1 bg-blue-600 hover:bg-blue-700"
                         onClick={() => handleVerifyNote(note.id)}
                         disabled={verifying}
                       >
@@ -485,7 +494,7 @@ export default function BookListPage() {
                 </Button>
                 {!selectedNote.verified && (
                   <Button
-                    className="flex-1 bg-green-600 hover:bg-green-700"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700"
                     onClick={() => handleVerifyNote(selectedNote.id)}
                     disabled={verifying}
                   >
@@ -530,6 +539,7 @@ export default function BookListPage() {
             <div className="border-t p-4 flex gap-2 justify-end">
               <Button
                 variant="outline"
+                className='bg-blue-600 text-white'
                 onClick={() => currentPdfNote && handleDownloadPdf(currentPdfNote)}
               >
                 Download PDF

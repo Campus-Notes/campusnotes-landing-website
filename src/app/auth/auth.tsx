@@ -93,7 +93,7 @@ export default function SignInScreen() {
     );
   }
 
-  const handleEmailPasswordLogin = async (e) => {
+  const handleEmailPasswordLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     setIsLoggingIn(true);
